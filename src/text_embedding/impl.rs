@@ -4,9 +4,10 @@
 use crate::common::load_tokenizer_hf_hub;
 use crate::{
     common::load_tokenizer,
-    models::text_embedding::{get_model_info, models_list},
+    models::{text_embedding::models_list, ModelTrait},
     pooling::Pooling,
-    Embedding, EmbeddingModel, EmbeddingOutput, ModelInfo, QuantizationMode, SingleBatchOutput,
+    Embedding, EmbeddingModel, EmbeddingOutput, ModelInfo, OutputKey, QuantizationMode,
+    SingleBatchOutput,
 };
 #[cfg(feature = "hf-hub")]
 use anyhow::Context;
@@ -18,17 +19,13 @@ use ort::{
     session::{builder::GraphOptimizationLevel, Session},
     value::Value,
 };
-use rayon::{
-    iter::{FromParallelIterator, ParallelIterator},
-    slice::ParallelSlice,
-};
 #[cfg(feature = "hf-hub")]
 use std::path::PathBuf;
 use std::thread::available_parallelism;
 use tokenizers::Tokenizer;
 
 #[cfg(feature = "hf-hub")]
-use super::InitOptions;
+use super::TextInitOptions;
 use super::{
     output, InitOptionsUserDefined, TextEmbedding, UserDefinedEmbeddingModel, DEFAULT_BATCH_SIZE,
 };
@@ -40,15 +37,14 @@ impl TextEmbedding {
     ///
     /// Uses the total number of CPUs available as the number of intra-threads
     #[cfg(feature = "hf-hub")]
-    pub fn try_new(options: InitOptions) -> Result<Self> {
-        let InitOptions {
+    pub fn try_new(options: TextInitOptions) -> Result<Self> {
+        let TextInitOptions {
+            max_length,
             model_name,
             execution_providers,
-            max_length,
             cache_dir,
             show_download_progress,
         } = options;
-
         let threads = available_parallelism()?.get();
 
         let model_repo = TextEmbedding::retrieve_model(
@@ -86,6 +82,7 @@ impl TextEmbedding {
             session,
             post_processing,
             TextEmbedding::get_quantization_mode(&model_name),
+            model_info.output_key.clone(),
         ))
     }
 
@@ -115,6 +112,7 @@ impl TextEmbedding {
             session,
             model.pooling,
             model.quantization,
+            model.output_key,
         ))
     }
 
@@ -124,6 +122,7 @@ impl TextEmbedding {
         session: Session,
         post_process: Option<Pooling>,
         quantization: QuantizationMode,
+        output_key: Option<OutputKey>,
     ) -> Self {
         let need_token_type_ids = session
             .inputs
@@ -136,6 +135,7 @@ impl TextEmbedding {
             need_token_type_ids,
             pooling: post_process,
             quantization,
+            output_key,
         }
     }
     /// Return the TextEmbedding model's directory from cache or remote retrieval
@@ -191,6 +191,8 @@ impl TextEmbedding {
             EmbeddingModel::ClipVitB32 => Some(Pooling::Mean),
 
             EmbeddingModel::JinaEmbeddingsV2BaseCode => Some(Pooling::Mean),
+
+            EmbeddingModel::EmbeddingGemma300M => Some(Pooling::Mean),
         }
     }
 
@@ -230,7 +232,7 @@ impl TextEmbedding {
 
     /// Get ModelInfo from EmbeddingModel
     pub fn get_model_info(model: &EmbeddingModel) -> Result<&ModelInfo<EmbeddingModel>> {
-        get_model_info(model).ok_or_else(|| {
+        EmbeddingModel::get_model_info(model).ok_or_else(|| {
             anyhow::Error::msg(format!(
                 "Model {model:?} not found. Please check if the model is supported \
                 by the current version."
@@ -260,15 +262,11 @@ impl TextEmbedding {
     /// arrays are aggregated, you can define your own array transformer
     /// and use it on [`EmbeddingOutput::export_with_transformer`] to extract the
     /// embeddings with your custom output type.
-    pub fn transform<'e, 'r, 's, S: AsRef<str> + Send + Sync>(
-        &'e self,
+    pub fn transform<S: AsRef<str> + Send + Sync>(
+        &mut self,
         texts: Vec<S>,
         batch_size: Option<usize>,
-    ) -> Result<EmbeddingOutput<'r, 's>>
-    where
-        'e: 'r,
-        'e: 's,
-    {
+    ) -> Result<EmbeddingOutput> {
         // Determine the batch size according to the quantization method used.
         // Default if not specified
         let batch_size = match self.quantization {
@@ -292,70 +290,68 @@ impl TextEmbedding {
             _ => Ok(batch_size.unwrap_or(DEFAULT_BATCH_SIZE)),
         }?;
 
-        let batches = Result::<Vec<_>>::from_par_iter(texts.par_chunks(batch_size).map(|batch| {
-            // Encode the texts in the batch
-            let inputs = batch.iter().map(|text| text.as_ref()).collect();
-            let encodings = self.tokenizer.encode_batch(inputs, true).map_err(|e| {
-                anyhow::Error::msg(e.to_string()).context("Failed to encode the batch.")
-            })?;
+        let batches = texts
+            .chunks(batch_size)
+            .map(|batch| {
+                // Encode the texts in the batch
+                let inputs = batch.iter().map(|text| text.as_ref()).collect();
+                let encodings = self.tokenizer.encode_batch(inputs, true).map_err(|e| {
+                    anyhow::Error::msg(e.to_string()).context("Failed to encode the batch.")
+                })?;
 
-            // Extract the encoding length and batch size
-            let encoding_length = encodings[0].len();
-            let batch_size = batch.len();
+                // Extract the encoding length and batch size
+                let encoding_length = encodings[0].len();
+                let batch_size = batch.len();
 
-            let max_size = encoding_length * batch_size;
+                let max_size = encoding_length * batch_size;
 
-            // Preallocate arrays with the maximum size
-            let mut ids_array = Vec::with_capacity(max_size);
-            let mut mask_array = Vec::with_capacity(max_size);
-            let mut type_ids_array = Vec::with_capacity(max_size);
+                // Preallocate arrays with the maximum size
+                let mut ids_array = Vec::with_capacity(max_size);
+                let mut mask_array = Vec::with_capacity(max_size);
+                let mut type_ids_array = Vec::with_capacity(max_size);
 
-            // Not using par_iter because the closure needs to be FnMut
-            encodings.iter().for_each(|encoding| {
-                let ids = encoding.get_ids();
-                let mask = encoding.get_attention_mask();
-                let type_ids = encoding.get_type_ids();
+                encodings.iter().for_each(|encoding| {
+                    let ids = encoding.get_ids();
+                    let mask = encoding.get_attention_mask();
+                    let type_ids = encoding.get_type_ids();
 
-                // Extend the preallocated arrays with the current encoding
-                // Requires the closure to be FnMut
-                ids_array.extend(ids.iter().map(|x| *x as i64));
-                mask_array.extend(mask.iter().map(|x| *x as i64));
-                type_ids_array.extend(type_ids.iter().map(|x| *x as i64));
-            });
+                    ids_array.extend(ids.iter().map(|x| *x as i64));
+                    mask_array.extend(mask.iter().map(|x| *x as i64));
+                    type_ids_array.extend(type_ids.iter().map(|x| *x as i64));
+                });
 
-            // Create CowArrays from vectors
-            let inputs_ids_array = Array::from_shape_vec((batch_size, encoding_length), ids_array)?;
+                let inputs_ids_array =
+                    Array::from_shape_vec((batch_size, encoding_length), ids_array)?;
+                let attention_mask_array =
+                    Array::from_shape_vec((batch_size, encoding_length), mask_array)?;
+                let token_type_ids_array =
+                    Array::from_shape_vec((batch_size, encoding_length), type_ids_array)?;
 
-            let attention_mask_array =
-                Array::from_shape_vec((batch_size, encoding_length), mask_array)?;
+                let mut session_inputs = ort::inputs![
+                    "input_ids" => Value::from_array(inputs_ids_array)?,
+                    "attention_mask" => Value::from_array(attention_mask_array.clone())?,
+                ];
 
-            let token_type_ids_array =
-                Array::from_shape_vec((batch_size, encoding_length), type_ids_array)?;
+                if self.need_token_type_ids {
+                    session_inputs.push((
+                        "token_type_ids".into(),
+                        Value::from_array(token_type_ids_array)?.into(),
+                    ));
+                }
 
-            let mut session_inputs = ort::inputs![
-                "input_ids" => Value::from_array(inputs_ids_array)?,
-                "attention_mask" => Value::from_array(attention_mask_array.view())?,
-            ]?;
-
-            if self.need_token_type_ids {
-                session_inputs.push((
-                    "token_type_ids".into(),
-                    Value::from_array(token_type_ids_array)?.into(),
-                ));
-            }
-
-            Ok(
-                // Package all the data required for post-processing (e.g. pooling)
-                // into a SingleBatchOutput struct.
-                SingleBatchOutput {
-                    session_outputs: self
-                        .session
-                        .run(session_inputs)
-                        .map_err(anyhow::Error::new)?,
+                let outputs_map = self
+                    .session
+                    .run(session_inputs)
+                    .map_err(anyhow::Error::new)?
+                    .into_iter()
+                    .map(|(k, v)| (k.to_string(), v))
+                    .collect();
+                Ok(SingleBatchOutput {
+                    outputs: outputs_map,
                     attention_mask_array,
-                },
-            )
-        }))?;
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(EmbeddingOutput::new(batches))
     }
@@ -372,15 +368,21 @@ impl TextEmbedding {
     /// This method is a higher level method than [`TextEmbedding::transform`] by utilizing
     /// the default output precedence and array transformer for the [`TextEmbedding`] model.
     pub fn embed<S: AsRef<str> + Send + Sync>(
-        &self,
+        &mut self,
         texts: Vec<S>,
         batch_size: Option<usize>,
     ) -> Result<Vec<Embedding>> {
         let batches = self.transform(texts, batch_size)?;
-
-        batches.export_with_transformer(output::transformer_with_precedence(
-            output::OUTPUT_TYPE_PRECEDENCE,
-            self.pooling.clone(),
-        ))
+        if let Some(output_key) = &self.output_key {
+            batches.export_with_transformer(output::transformer_with_precedence(
+                output_key,
+                self.pooling.clone(),
+            ))
+        } else {
+            batches.export_with_transformer(output::transformer_with_precedence(
+                output::OUTPUT_TYPE_PRECEDENCE,
+                self.pooling.clone(),
+            ))
+        }
     }
 }

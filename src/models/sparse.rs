@@ -2,9 +2,10 @@ use std::{fmt::Display, str::FromStr};
 
 use crate::ModelInfo;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub enum SparseModel {
     /// prithivida/Splade_PP_en_v1
+    #[default]
     SPLADEPPV1,
 }
 
@@ -16,6 +17,7 @@ pub fn models_list() -> Vec<ModelInfo<SparseModel>> {
         model_code: String::from("Qdrant/Splade_PP_en_v1"),
         model_file: String::from("model.onnx"),
         additional_files: Vec::new(),
+        output_key: None,
     }]
 }
 

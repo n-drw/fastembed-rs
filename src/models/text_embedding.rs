@@ -1,11 +1,11 @@
 use std::{collections::HashMap, convert::TryFrom, fmt::Display, str::FromStr, sync::OnceLock};
 
-use super::model_info::ModelInfo;
+use super::{model_info::ModelInfo, ModelTrait};
 
 /// Lazy static list of all available models.
 static MODEL_MAP: OnceLock<HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>>> = OnceLock::new();
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum EmbeddingModel {
     /// sentence-transformers/all-MiniLM-L6-v2
     AllMiniLML6V2,
@@ -24,6 +24,7 @@ pub enum EmbeddingModel {
     /// Quantized BAAI/bge-large-en-v1.5
     BGELargeENV15Q,
     /// BAAI/bge-small-en-v1.5 - Default
+    #[default]
     BGESmallENV15,
     /// Quantized BAAI/bge-small-en-v1.5
     BGESmallENV15Q,
@@ -67,6 +68,8 @@ pub enum EmbeddingModel {
     ClipVitB32,
     /// jinaai/jina-embeddings-v2-base-code
     JinaEmbeddingsV2BaseCode,
+    /// onnx-community/embeddinggemma-300m-ONNX
+    EmbeddingGemma300M,
 }
 
 /// Centralized function to initialize the models map.
@@ -79,6 +82,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("Qdrant/all-MiniLM-L6-v2-onnx"),
             model_file: String::from("model.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::AllMiniLML6V2Q,
@@ -87,6 +91,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("Xenova/all-MiniLM-L6-v2"),
             model_file: String::from("onnx/model_quantized.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::AllMiniLML12V2,
@@ -95,6 +100,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("Xenova/all-MiniLM-L12-v2"),
             model_file: String::from("onnx/model.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::AllMiniLML12V2Q,
@@ -103,6 +109,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("Xenova/all-MiniLM-L12-v2"),
             model_file: String::from("onnx/model_quantized.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::BGEBaseENV15,
@@ -111,6 +118,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("Xenova/bge-base-en-v1.5"),
             model_file: String::from("onnx/model.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::BGEBaseENV15Q,
@@ -119,6 +127,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("Qdrant/bge-base-en-v1.5-onnx-Q"),
             model_file: String::from("model_optimized.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::BGELargeENV15,
@@ -127,6 +136,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("Xenova/bge-large-en-v1.5"),
             model_file: String::from("onnx/model.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::BGELargeENV15Q,
@@ -135,6 +145,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("Qdrant/bge-large-en-v1.5-onnx-Q"),
             model_file: String::from("model_optimized.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::BGESmallENV15,
@@ -143,6 +154,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("Xenova/bge-small-en-v1.5"),
             model_file: String::from("onnx/model.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::BGESmallENV15Q,
@@ -153,6 +165,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("Qdrant/bge-small-en-v1.5-onnx-Q"),
             model_file: String::from("model_optimized.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::NomicEmbedTextV1,
@@ -161,6 +174,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("nomic-ai/nomic-embed-text-v1"),
             model_file: String::from("onnx/model.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::NomicEmbedTextV15,
@@ -169,6 +183,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("nomic-ai/nomic-embed-text-v1.5"),
             model_file: String::from("onnx/model.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::NomicEmbedTextV15Q,
@@ -179,6 +194,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("nomic-ai/nomic-embed-text-v1.5"),
             model_file: String::from("onnx/model_quantized.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::ParaphraseMLMiniLML12V2Q,
@@ -187,6 +203,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("Qdrant/paraphrase-multilingual-MiniLM-L12-v2-onnx-Q"),
             model_file: String::from("model_optimized.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::ParaphraseMLMiniLML12V2,
@@ -195,6 +212,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("Xenova/paraphrase-multilingual-MiniLM-L12-v2"),
             model_file: String::from("onnx/model.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::ParaphraseMLMpnetBaseV2,
@@ -205,6 +223,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("Xenova/paraphrase-multilingual-mpnet-base-v2"),
             model_file: String::from("onnx/model.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::BGESmallZHV15,
@@ -213,6 +232,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("Xenova/bge-small-zh-v1.5"),
             model_file: String::from("onnx/model.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::BGELargeZHV15,
@@ -221,6 +241,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("Xenova/bge-large-zh-v1.5"),
             model_file: String::from("onnx/model.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::ModernBertEmbedLarge,
@@ -229,6 +250,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("lightonai/modernbert-embed-large"),
             model_file: String::from("onnx/model.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::MultilingualE5Small,
@@ -237,6 +259,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("intfloat/multilingual-e5-small"),
             model_file: String::from("onnx/model.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::MultilingualE5Base,
@@ -245,6 +268,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("intfloat/multilingual-e5-base"),
             model_file: String::from("onnx/model.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::MultilingualE5Large,
@@ -253,6 +277,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("Qdrant/multilingual-e5-large-onnx"),
             model_file: String::from("model.onnx"),
             additional_files: vec!["model.onnx_data".to_string()],
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::MxbaiEmbedLargeV1,
@@ -261,6 +286,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("mixedbread-ai/mxbai-embed-large-v1"),
             model_file: String::from("onnx/model.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::MxbaiEmbedLargeV1Q,
@@ -269,6 +295,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("mixedbread-ai/mxbai-embed-large-v1"),
             model_file: String::from("onnx/model_quantized.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::GTEBaseENV15,
@@ -277,6 +304,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("Alibaba-NLP/gte-base-en-v1.5"),
             model_file: String::from("onnx/model.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::GTEBaseENV15Q,
@@ -285,6 +313,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("Alibaba-NLP/gte-base-en-v1.5"),
             model_file: String::from("onnx/model_quantized.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::GTELargeENV15,
@@ -293,6 +322,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("Alibaba-NLP/gte-large-en-v1.5"),
             model_file: String::from("onnx/model.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::GTELargeENV15Q,
@@ -301,6 +331,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("Alibaba-NLP/gte-large-en-v1.5"),
             model_file: String::from("onnx/model_quantized.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::ClipVitB32,
@@ -309,6 +340,7 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("Qdrant/clip-ViT-B-32-text"),
             model_file: String::from("model.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: EmbeddingModel::JinaEmbeddingsV2BaseCode,
@@ -317,6 +349,16 @@ fn init_models_map() -> HashMap<EmbeddingModel, ModelInfo<EmbeddingModel>> {
             model_code: String::from("jinaai/jina-embeddings-v2-base-code"),
             model_file: String::from("onnx/model.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
+        },
+        ModelInfo {
+            model: EmbeddingModel::EmbeddingGemma300M,
+            dim: 768,
+            description: String::from("EmbeddingGemma is a 300M parameter from Google"),
+            model_code: String::from("onnx-community/embeddinggemma-300m-ONNX"),
+            model_file: String::from("onnx/model.onnx"),
+            additional_files: vec!["onnx/model.onnx_data".to_string()],
+            output_key: Some(crate::OutputKey::ByName("sentence_embedding")),
         },
     ];
 
@@ -341,11 +383,6 @@ pub fn models_map() -> &'static HashMap<EmbeddingModel, ModelInfo<EmbeddingModel
     MODEL_MAP.get_or_init(init_models_map)
 }
 
-/// Get model information by model code.
-pub fn get_model_info(model: &EmbeddingModel) -> Option<&ModelInfo<EmbeddingModel>> {
-    models_map().get(model)
-}
-
 /// Get a list of all available models.
 ///
 /// This will assign new memory to the models list; where possible, use
@@ -354,9 +391,18 @@ pub fn models_list() -> Vec<ModelInfo<EmbeddingModel>> {
     models_map().values().cloned().collect()
 }
 
+impl ModelTrait for EmbeddingModel {
+    type Model = Self;
+
+    /// Get model information by model code.
+    fn get_model_info(model: &EmbeddingModel) -> Option<&ModelInfo<EmbeddingModel>> {
+        models_map().get(model)
+    }
+}
+
 impl Display for EmbeddingModel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let model_info = get_model_info(self).expect("Model not found.");
+        let model_info = EmbeddingModel::get_model_info(self).expect("Model not found.");
         write!(f, "{}", model_info.model_code)
     }
 }

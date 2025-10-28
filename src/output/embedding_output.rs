@@ -1,5 +1,4 @@
 use ndarray::{Array2, ArrayView, Dim, IxDynImpl};
-use ort::session::SessionOutputs;
 
 use crate::pooling;
 
@@ -10,12 +9,12 @@ use super::{OutputKey, OutputPrecedence};
 /// In the future, each batch will need to deal with its own post-processing, such as
 /// pooling etc. This struct should contain all the necessary information for the
 /// post-processing to be performed.
-pub struct SingleBatchOutput<'r, 's> {
-    pub session_outputs: SessionOutputs<'r, 's>,
+pub struct SingleBatchOutput {
+    pub outputs: Vec<(String, ort::value::Value)>,
     pub attention_mask_array: Array2<i64>,
 }
 
-impl SingleBatchOutput<'_, '_> {
+impl SingleBatchOutput {
     /// Select the output from the session outputs based on the given precedence.
     ///
     /// This returns a view into the tensor, which can be used to perform further
@@ -23,31 +22,31 @@ impl SingleBatchOutput<'_, '_> {
     pub fn select_output(
         &self,
         precedence: &impl OutputPrecedence,
-    ) -> anyhow::Result<ArrayView<f32, Dim<IxDynImpl>>> {
+    ) -> anyhow::Result<ArrayView<'_, f32, Dim<IxDynImpl>>> {
         let ort_output: &ort::value::Value = precedence
             .key_precedence()
             .find_map(|key| match key {
-                OutputKey::OnlyOne => self
-                    .session_outputs
-                    .get(self.session_outputs.keys().nth(0)?),
-                OutputKey::ByOrder(idx) => {
-                    let x = self
-                        .session_outputs
-                        .get(self.session_outputs.keys().nth(*idx)?);
-                    x
+                // Only select the sole output if and only if there is exactly one.
+                OutputKey::OnlyOne => {
+                    if self.outputs.len() == 1 {
+                        self.outputs.first().map(|(_, v)| v)
+                    } else {
+                        None
+                    }
                 }
-                OutputKey::ByName(name) => self.session_outputs.get(name),
+                OutputKey::ByOrder(idx) => self.outputs.get(*idx).map(|(_, v)| v),
+                OutputKey::ByName(name) => {
+                    self.outputs.iter().find(|(n, _)| n == name).map(|(_, v)| v)
+                }
             })
             .ok_or_else(|| {
                 anyhow::Error::msg(format!(
-                    "No suitable output found in the session outputs. Available outputs: {:?}",
-                    self.session_outputs.keys().collect::<Vec<_>>()
+                    "No suitable output found in the outputs. Available outputs: {:?}",
+                    self.outputs.iter().map(|(k, _)| k).collect::<Vec<_>>()
                 ))
             })?;
 
-        ort_output
-            .try_extract_tensor::<f32>()
-            .map_err(anyhow::Error::new)
+        ort_output.try_extract_array().map_err(anyhow::Error::new)
     }
 
     /// Select the output from the session outputs based on the given precedence and pool it.
@@ -77,13 +76,13 @@ impl SingleBatchOutput<'_, '_> {
 /// Container struct with all the outputs from the embedding layer.
 ///
 /// This will contain one [`SingleBatchOutput`] object per batch/inference call.
-pub struct EmbeddingOutput<'r, 's> {
-    batches: Vec<SingleBatchOutput<'r, 's>>,
+pub struct EmbeddingOutput {
+    batches: Vec<SingleBatchOutput>,
 }
 
-impl<'r, 's> EmbeddingOutput<'r, 's> {
+impl EmbeddingOutput {
     /// Create a new [`EmbeddingOutput`] from a [`ort::SessionOutputs`] object.
-    pub fn new(batches: impl IntoIterator<Item = SingleBatchOutput<'r, 's>>) -> Self {
+    pub fn new(batches: impl IntoIterator<Item = SingleBatchOutput>) -> Self {
         Self {
             batches: batches.into_iter().collect(),
         }
@@ -93,7 +92,7 @@ impl<'r, 's> EmbeddingOutput<'r, 's> {
     ///
     /// This allows the user to perform their custom extractions outside of this
     /// library.
-    pub fn into_raw(self) -> Vec<SingleBatchOutput<'r, 's>> {
+    pub fn into_raw(self) -> Vec<SingleBatchOutput> {
         self.batches
     }
 

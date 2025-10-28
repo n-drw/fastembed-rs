@@ -2,9 +2,10 @@ use std::{fmt::Display, str::FromStr};
 
 use super::model_info::ModelInfo;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub enum ImageEmbeddingModel {
     /// Qdrant/clip-ViT-B-32-vision
+    #[default]
     ClipVitB32,
     /// Qdrant/resnet50-onnx
     Resnet50,
@@ -25,6 +26,7 @@ pub fn models_list() -> Vec<ModelInfo<ImageEmbeddingModel>> {
             model_code: String::from("Qdrant/clip-ViT-B-32-vision"),
             model_file: String::from("model.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: ImageEmbeddingModel::Resnet50,
@@ -33,6 +35,7 @@ pub fn models_list() -> Vec<ModelInfo<ImageEmbeddingModel>> {
             model_code: String::from("Qdrant/resnet50-onnx"),
             model_file: String::from("model.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: ImageEmbeddingModel::UnicomVitB16,
@@ -41,6 +44,7 @@ pub fn models_list() -> Vec<ModelInfo<ImageEmbeddingModel>> {
             model_code: String::from("Qdrant/Unicom-ViT-B-16"),
             model_file: String::from("model.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: ImageEmbeddingModel::UnicomVitB32,
@@ -49,6 +53,7 @@ pub fn models_list() -> Vec<ModelInfo<ImageEmbeddingModel>> {
             model_code: String::from("Qdrant/Unicom-ViT-B-32"),
             model_file: String::from("model.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
         ModelInfo {
             model: ImageEmbeddingModel::NomicEmbedVisionV15,
@@ -57,6 +62,7 @@ pub fn models_list() -> Vec<ModelInfo<ImageEmbeddingModel>> {
             model_code: String::from("nomic-ai/nomic-embed-vision-v1.5"),
             model_file: String::from("onnx/model.onnx"),
             additional_files: Vec::new(),
+            output_key: None,
         },
     ];
 

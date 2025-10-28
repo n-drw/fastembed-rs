@@ -34,7 +34,7 @@
 ```
 # use fastembed::{TextEmbedding, InitOptions, EmbeddingModel};
 # fn embedding_demo() -> anyhow::Result<()> {
-# let model: TextEmbedding = TextEmbedding::try_new(Default::default())?;
+# let mut model: TextEmbedding = TextEmbedding::try_new(Default::default())?;
  let documents = vec![
     "passage: Hello, World!",
     "query: Hello, World!",
@@ -55,6 +55,7 @@
 
 mod common;
 mod image_embedding;
+mod init;
 mod models;
 pub mod output;
 mod pooling;
@@ -64,19 +65,23 @@ mod text_embedding;
 
 pub use ort::execution_providers::ExecutionProviderDispatch;
 
-pub use crate::common::{
-    get_cache_dir, read_file_to_bytes, Embedding, Error, SparseEmbedding, TokenizerFiles,
-};
+pub use crate::common::{get_cache_dir, Embedding, Error, SparseEmbedding, TokenizerFiles};
 pub use crate::models::{
     model_info::ModelInfo, model_info::RerankerModelInfo, quantization::QuantizationMode,
 };
 pub use crate::output::{EmbeddingOutput, OutputKey, OutputPrecedence, SingleBatchOutput};
 pub use crate::pooling::Pooling;
 
+// For all Embedding
+pub use crate::init::{InitOptions as BaseInitOptions, InitOptionsWithLength};
+pub use crate::models::ModelTrait;
+
 // For Text Embedding
 pub use crate::models::text_embedding::EmbeddingModel;
+#[deprecated(note = "use `TextInitOptions` instead")]
+pub use crate::text_embedding::TextInitOptions as InitOptions;
 pub use crate::text_embedding::{
-    InitOptions, InitOptionsUserDefined, TextEmbedding, UserDefinedEmbeddingModel,
+    InitOptionsUserDefined, TextEmbedding, TextInitOptions, UserDefinedEmbeddingModel,
 };
 
 // For Sparse Text Embedding
